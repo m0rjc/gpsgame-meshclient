@@ -133,7 +133,7 @@ Use HTTP POST upstream (gateway → bridge, stateless, trivially retried) and sh
 - Gateway retries HTTP/WS forwarding with exponential backoff on transient bridge failures.
 - Bridge queues outbound `deliver` commands while a gateway is offline; delivers on reconnect.
 - Commands expire after a configurable window (suggested 30 s–2 min) to prevent stale delivery after a device has moved on.
-- Bridge deduplicates events using `(node_id, event_timestamp)` in case a gateway retries.
+- Bridge deduplicates events on `(node_id, event_type, ts)`. This tuple is the logical event ID: firmware retransmissions carry the same `ts` (the event creation time), so they collapse to a single delivery. A player pressing the button twice produces two distinct `ts` values and is intentionally treated as two separate events; game-level idempotency ("already checked in") is the game server's concern, not the bridge's.
 
 ## Security
 

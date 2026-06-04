@@ -85,7 +85,7 @@ The device is enrolled and participating in the game.
 
 - GPS is polled adaptively; geofence evaluation runs on each fix. See [GPS Polling Strategy](#gps-polling-strategy).
 - On entering a geofence: send `EVENT_REPORT(event_type=0x00)`.
-- On button press: send `EVENT_REPORT(event_type=0x01)`.
+- On button press: send `EVENT_REPORT(event_type=0x01)`. The button is locked until `EVENT_ACK` is received or all retries are exhausted. This prevents a player pressing again out of doubt before the ACK arrives — unlike the existing mobile device based game experience where confirmation is synchronous, LoRa ACK latency is long enough that a second press is almost never intentional.
 - If `PING_INTERVAL` elapses since the last report: send `EVENT_REPORT(event_type=0x02)`.
 - All `EVENT_REPORT` packets wait for `EVENT_ACK`; retry up to `EVENT_RETRY_COUNT` times.
 - On receiving `UNENROLL`: clear fences from NVS, transition to **Unenrolled**.
@@ -131,7 +131,8 @@ The device must be observable without a screen. The pattern column is sufficient
 | Unenrolled | Double blink — 1 s period | Yellow |
 | Syncing | Rapid blink — 200 ms period | Yellow |
 | Active (idle) | Slow heartbeat — on 100 ms, off 1900 ms | Green |
-| Event sent | Solid 500 ms flash, then resume Active | White |
+| Event pending (sent, awaiting ACK) | Fast double-blink — 250 ms period | White |
+| Event acknowledged | Solid 500 ms flash, then resume Active | White |
 | UNENROLL received | Three rapid flashes, then Unenrolled pattern | Red |
 
 The `led_indicator` module should accept a `bool has_rgb` flag set at build time. When false it drives a single GPIO with the pattern only; when true it drives R/G/B channels and applies both pattern and colour.

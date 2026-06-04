@@ -152,7 +152,7 @@ Fields:
 - `uint8_t type` = `0x04`
 - `uint8_t version` — protocol version
 - `latlon_t location` — 6 bytes
-- `time_t ts` — 8 bytes
+- `time_t ts` — 8 bytes. Captured once when the event occurs; preserved unchanged on retransmissions. Together with `node_id` and `event_type`, this is the event's unique ID for bridge-level deduplication.
 - `uint8_t event_type`
   - `0x00` = automatic geofence entry
   - `0x01` = user-initiated (button press)
@@ -167,7 +167,7 @@ Sent by the server to acknowledge event receipt.
 Fields:
 - `uint8_t type` = `0x05`
 - `uint8_t event_type`
-- `time_t event_ts` — timestamp of the acknowledged event, for correlation
+- `time_t event_ts` — timestamp of the acknowledged event, echoed from `EVENT_REPORT.ts`. The device uses this to match the ACK to its pending event and stop retrying.
 
 Total size: 10 bytes
 
