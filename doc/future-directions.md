@@ -90,6 +90,32 @@ cannot disrupt checkpoint reporting.
 
 ---
 
+## Multiple gateways in a single game
+
+A wide-area game with many players may exceed what a single gateway can cover or
+handle. Multiple gateways distributed across the playing area would extend range
+and share the load, but require player devices to know which gateway to target —
+and to re-target if they move or a gateway becomes unreachable.
+
+The current design uses directed (unicast) traffic for event reports rather than
+mesh floods, to keep channel airtime low. Whether that holds at scale is an open
+question. Two broad approaches are worth exploring:
+
+- **Flood fallback on failure** — keep directed traffic as the primary path; fall
+  back to a limited flood if the directed attempt fails. Simpler, and the flood
+  cost is bounded by the retry rate.
+- **Gateway advertising** — gateways periodically broadcast their presence; devices
+  track reachability and select the best gateway. More structured, but adds
+  protocol complexity and baseline traffic.
+
+A key factor is that check-in events are inherently infrequent: a player takes
+minutes to tens of minutes to travel between checkpoints in a wide game. Per-device
+airtime is therefore low regardless of approach. That may make occasional floods
+acceptable in a way they would not be in a high-frequency telemetry application,
+and is worth weighing when comparing the two options.
+
+---
+
 ## Considerations for future protocol versions
 
 The `version` field present in `INIT_REQ` and `EVENT_REPORT` is the hook for
