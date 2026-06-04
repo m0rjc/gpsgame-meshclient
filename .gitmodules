@@ -1,0 +1,4 @@
+[submodule "meshcore"]
+	path = meshcore
+	url = git@github.com:meshcore-dev/MeshCore.git
+	branch = main
