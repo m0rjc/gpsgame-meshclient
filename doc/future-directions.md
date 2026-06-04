@@ -58,6 +58,45 @@ event or a checkpoint visit based on the station's registered role.
 
 ---
 
+## Large Charity Walks
+
+A charity walk has a different requirement to a wide game. It's no longer important who reached a checkpoint first, but it is important who
+has reached each checkpoint and approximately when. RAYNET provide radio communications for such events and often pass this information over
+radio using voice FM. They will pass competitor numbers and times, often bucketing to 5 minute intervals. Messages are batched so that reports
+are not too delayed (especially for the first entrants and the sweep walker) but the amount of transmissions is kept small.
+
+Such a system would require a different packet protocol and a different backend server, but it has a lot in common with this system and could
+share a lot of the codebase. The checkpoint stations would batch arrival information and maintain a delivery queue, delivering packets when full or
+when enough idle time has passed. A large linear event such as the Nidderdale Rotary Walk could consider a forwarding approach where checkpoints
+further down the valley relay packets for more remote stations, or use a hilltop repeater network.
+
+It should be possible to pack a competitor number and relative time into 3 or 4 bytes, so maximising the amount of reports we can squeeze into a single
+LoRa packet. A possible format could be to use tight bit packing. Solving this is just maths and easily testable. A system that doesn't care about per-competitor
+timing beyond the accuracy of the packet timestamp (and therefore the maximum delay configured) can set the bits per relative time to 0.
+
+The bucket size is preconfigured — transmitted to the station as part of the server's enrollment response. If the bucket interval is 5 minutes
+and the packet timestamp is 10:00, then a relative time value of 0 represents any arrival between 10:00:00 and 10:04:59.
+
+### Header
+
+| type    | content          |
+| ------- | ---------------- |
+| 8 bits  | type enum        |
+| 8 bits  | version          |
+| 16 bits | packet timestamp |
+| 4 bits  | bits per competitor number — n = ⌈log₂(maxcompetitor)⌉ |
+| 4 bits  | bits per relative time — n = ⌈log₂(max_buckets)⌉ |
+
+### Reports
+
+| type    | content          |
+| ------- | ---------------- |
+| x bits  | unsigned integer competitor number       |
+| y bits  | unsigned time in bucket intervals since the packet timestamp   |
+
+
+---
+
 ## Text reply messages
 
 After an `EVENT_ACK` the server could append a short text string for display on
