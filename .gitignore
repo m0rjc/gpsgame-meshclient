@@ -1,3 +1,4 @@
 .pio/
 .vscode/
 *.local.ini
+CLAUDE.local.md

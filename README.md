@@ -70,12 +70,12 @@ The interface between the two is defined in [`doc/gateway-design.md`](doc/gatewa
 
 ## Hardware
 
-These are the development boards that I am using. The system should support other boards as supported by Meshcore.
-
-| Role    | Recommended board                 | Notes                                    |
+| Role    | Board                             | Notes                                    |
 |---------|-----------------------------------|------------------------------------------|
-| Device  | Seeed T1000-E                     | GPS + LR1110 LoRa built in, compact      |
-| Gateway | Heltec WiFi LoRa 32 V3            | WiFi for internet connectivity           |
+| Device  | Seeed T1000-E (nRF52840)          | GPS + LR1110 LoRa built in, compact form factor, low power |
+| Gateway | Heltec WiFi LoRa 32 V3 (ESP32-S3) | WiFi for internet connectivity           |
+
+The system uses board-variant configs and can be extended to other MeshCore-supported boards, but these are the two targeted platforms.
 
 ## Getting started
 
@@ -104,16 +104,15 @@ pio project config --json-output | python -c \
 Build a specific target:
 
 ```bash
-pio run -e heltec_v3_gps_device
-pio run -e heltec_v3_gps_gateway
-pio run -e t1000e_gps_device
+pio run -e t1000e_gps_device        # player device (T1000-E)
+pio run -e heltec_v3_gps_gateway    # gateway (Heltec V3)
 ```
 
 Upload and monitor:
 
 ```bash
-pio run -e heltec_v3_gps_device -t upload
-pio device monitor -e heltec_v3_gps_device
+pio run -e t1000e_gps_device -t upload
+pio device monitor -e t1000e_gps_device
 ```
 
 ### Local overrides
