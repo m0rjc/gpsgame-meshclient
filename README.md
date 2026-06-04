@@ -17,7 +17,7 @@ proprietary.
   ┌─────────────┐   LoRa mesh  ┌──────────────┐  HTTPS  ┌────────────────┐
   │ GPS         │◄────────────►│ MeshCore     │◄───────►│ Bridge micro-  │
   │ geofence    │              │ room server  │         │ service        │
-  │ state mach. │              │ + WebSocket  │         │ (separate repo)│
+  │ state mach. │              │ + WebSocket  │         │                │
   └─────────────┘              └──────────────┘         └────────────────┘
 ```
 
@@ -70,10 +70,11 @@ The interface between the two is defined in [`doc/gateway-design.md`](doc/gatewa
 
 ## Hardware
 
+These are the development boards that I am using. The system should support other boards as supported by Meshcore.
+
 | Role    | Recommended board                 | Notes                                    |
 |---------|-----------------------------------|------------------------------------------|
 | Device  | Seeed T1000-E                     | GPS + LR1110 LoRa built in, compact      |
-| Device  | Heltec WiFi LoRa 32 V3            | SX1262, OLED, GPS header — dev-friendly  |
 | Gateway | Heltec WiFi LoRa 32 V3            | WiFi for internet connectivity           |
 
 ## Getting started
