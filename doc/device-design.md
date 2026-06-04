@@ -12,6 +12,23 @@ Based on `examples/simple_sensor`. Minimum required:
 - **LED or small display** — state feedback to the player and organiser
 - **Flash / NVS** — non-volatile storage for gateway ID and geofence set
 
+## GPS Polling Strategy
+
+The GNSS module is the dominant power consumer (~25 mA active vs ~6–8 mA for the MCU and LoRa combined). Continuous tracking gives roughly 22 hours from the 700 mAh battery; polling extends this significantly.
+
+The device uses **adaptive polling** based on proximity to known geofences. Because the full fence set is received during sync, the device can compute its distance to every fence center on each fix without any additional uplink.
+
+| Proximity to nearest fence | Poll interval |
+|---|---|
+| > 200 m (or no fences) | 60 s |
+| ≤ 200 m | 15 s |
+
+Expected average battery life under adaptive polling is 4–7 days depending on how much time is spent near fences. Continuous tracking is not used in the Active state.
+
+**Hot-start dependency.** The T1000-E maintains backup power to the GNSS module so that almanac and ephemeris are retained across poll cycles. This gives a hot-start TTFF of ~1–2 s. If backup power is lost (device fully discharged), the first poll after recovery will take 30–60 s (warm/cold start); the firmware must wait for a valid fix quality before acting on coordinates rather than accepting the first NMEA sentence.
+
+**Polling gap and detection.** At 15 s near a fence, a walking player (~1.4 m/s) covers ~21 m between samples. At 60 s far from fences a player covers ~85 m. Game organisers should be aware that small fences on busy thoroughfares will have a non-trivial miss rate at any polling interval and should treat them accordingly.
+
 ## State Machine
 
 ```mermaid
@@ -66,7 +83,7 @@ Transitions to **Active** on receiving `READY_ACK`.
 
 The device is enrolled and participating in the game.
 
-- GPS is polled continuously; geofence evaluation runs on each fix.
+- GPS is polled adaptively; geofence evaluation runs on each fix. See [GPS Polling Strategy](#gps-polling-strategy).
 - On entering a geofence: send `EVENT_REPORT(event_type=0x00)`.
 - On button press: send `EVENT_REPORT(event_type=0x01)`.
 - If `PING_INTERVAL` elapses since the last report: send `EVENT_REPORT(event_type=0x02)`.
@@ -94,6 +111,10 @@ Enrollment has no firmware timeout or retry. The organiser assigns the device vi
 | Parameter | Suggested default | Notes |
 |-----------|-------------------|-------|
 | `PING_INTERVAL` | 5 min | Time since last `EVENT_REPORT` before a location ping is sent |
+| `GPS_POLL_FAR` | 60 s | Poll interval when > `GPS_NEAR_THRESHOLD` from all fences |
+| `GPS_POLL_NEAR` | 15 s | Poll interval when within `GPS_NEAR_THRESHOLD` of any fence |
+| `GPS_NEAR_THRESHOLD` | 200 m | Distance from fence center that triggers faster polling |
+| `FENCE_HYSTERESIS` | 15 m | Extra distance beyond fence radius required before exit is declared |
 | `SYNC_RETRY_DELAY` | 3 s | Delay before sending `SYNC_STATUS` for a missing segment |
 | `EVENT_RETRY_DELAY` | 5 s | Delay between `EVENT_REPORT` retransmissions |
 | `EVENT_RETRY_COUNT` | 3 | Maximum retries before giving up on an event |
@@ -118,6 +139,58 @@ The `led_indicator` module should accept a `bool has_rgb` flag set at build time
 If a small OLED or e-ink display is present, show: current state name, GPS fix status (no fix / 2D / 3D), and the time of the last event sent.
 
 Design rule: the LED patterns are driven entirely by the state machine. No module other than `led_indicator` touches the LED hardware, and `led_indicator` takes its cue from the current state enum. This keeps the UI testable independently of radio and GPS behaviour.
+
+## Geofence Evaluation
+
+### Geometry
+
+Geofences are circles. A **compound fence** is a named logical fence composed of multiple overlapping circles (e.g. an irregularly shaped area). A device is *inside* a compound fence if it is inside any of its sub-circles.
+
+```
+inside_compound(pos, fence) =
+    any sub-circle c in fence: distance(pos, c.center) < c.radius
+
+entered(pos, fence) =
+    !was_inside_compound && inside_compound(pos, fence)
+
+exited(pos, fence) =
+    was_inside_compound &&
+    ALL sub-circles c in fence: distance(pos, c.center) > (c.radius + FENCE_HYSTERESIS)
+```
+
+`FENCE_HYSTERESIS` prevents boundary noise from generating spurious exit/re-entry events. Default 15 m; must exceed the GNSS horizontal accuracy under typical conditions.
+
+The `was_inside_compound` flag is stored per logical fence, not per sub-circle. Moving between overlapping sub-circles of the same compound fence does not generate events.
+
+### Implicit exit via entering a different fence
+
+If the device is inside fence A and a fix places it inside fence B (a different compound fence), generate `exit(A)` before `enter(B)`. This handles adjacent or slightly overlapping fences without waiting for the hysteresis condition relative to A to be satisfied.
+
+### Polling gap
+
+At the near-fence poll rate (15 s), a walking player covers ~21 m between samples. A 30 m radius fence can in principle be entered and exited between samples. Organisers should treat small fences on busy thoroughfares as best-effort detection, not hard enforcement.
+
+### Data representation
+
+```c
+typedef struct {
+    int32_t  lat;       // latlon_t encoding (24-bit, ~1.2 cm resolution)
+    int32_t  lon;
+    uint16_t radius_m;
+} circle_t;
+
+typedef struct {
+    uint8_t  fence_id;
+    uint8_t  circle_count;
+    circle_t circles[MAX_CIRCLES_PER_FENCE];
+} geofence_t;
+```
+
+The full fence array is stored in NVS and restored on power-on so the device resumes Active state without re-syncing.
+
+### Score integrity
+
+For most game types fence detection is best-effort. Game types that use fence entry as a penalty or rent mechanic (e.g. a checkpoint in a thoroughfare) are inherently gameable: signal-blocking the device is undetectable at the firmware level, and polling gaps mean short transits may not be captured. Events that arrive late — e.g. after a device recovers from signal loss — are retried via the existing `EVENT_REPORT` retry mechanism and will reach the server, but the server receives them out of order relative to real time. Retroactive score adjustment based on late events is a server/game concern and out of scope here. Organisers should choose game mechanics that match the detection reliability they can expect.
 
 ## Firmware Module Structure
 
