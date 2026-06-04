@@ -171,6 +171,42 @@ Fields:
 
 Total size: 10 bytes
 
+### Event reporting sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Game as Game Backend
+    participant Micro as Bridge Microservice
+    participant GW as Gateway
+    participant Tracker as Player Tracker Device
+
+    Note over Tracker: Geofence crossed or button pressed
+    Note over Tracker: ts captured once, button locked, pending LED
+
+    Tracker->>GW: EVENT_REPORT [type=0x04, event_type, ts, location]
+    GW->>Micro: WS device_event (node_id, event_type, ts, location)
+    Micro->>Game: POST /event (team resolved from node_id)
+    Game-->>Micro: 200 OK or 403 Forbidden
+
+    alt 200 OK
+        Micro->>GW: WS deliver EVENT_ACK
+        GW->>Tracker: EVENT_ACK [type=0x05, event_type, event_ts=ts]
+        Note over Tracker: Button unlocked, acknowledged LED
+    else 403 Forbidden (player token expired / game ended)
+        Micro->>GW: WS deliver UNENROLL
+        GW->>Tracker: UNENROLL [type=0x07]
+        Note over Tracker: Clears fences, returns to Unenrolled
+    end
+
+    rect rgb(240, 248, 255)
+        Note over Tracker,GW: Retry if no ACK within EVENT_RETRY_DELAY (up to EVENT_RETRY_COUNT times)
+        Tracker->>GW: EVENT_REPORT [same ts — retransmission]
+        GW->>Micro: WS device_event (same node_id, event_type, ts)
+        Note over Micro: Duplicate on (node_id, event_type, ts) — dropped
+    end
+```
+
 ### 6. READY_ACK
 
 Sent by the server after the device has successfully synchronised all geofence segments and the game assignment is confirmed. Closes the enrollment handshake: the device knows its `SYNC_STATUS` was received.

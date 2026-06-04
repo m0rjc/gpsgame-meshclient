@@ -104,7 +104,7 @@ Use HTTP POST upstream (gateway → bridge, stateless, trivially retried) and sh
 1. Device sends `EVENT_REPORT` over mesh → Gateway receives it.
 2. Gateway forwards to Bridge via WebSocket.
 3. Bridge looks up player token and calls game API.
-4. Bridge sends `deliver` with `EVENT_ACK` (or `UNENROLL` if the game has ended).
+4. On `200 OK`: Bridge sends `deliver` with `EVENT_ACK`. On `403 Forbidden` (player token expired / game ended): Bridge sends `deliver` with `UNENROLL`.
 
 ## Data Model (Postgres)
 
