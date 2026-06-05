@@ -10,6 +10,10 @@ gateway code in this repository are fully open source; the game server that
 awards scores and manages players is a separate project and can remain
 proprietary.
 
+> **Status: design phase.** Architecture and protocol are documented; firmware
+> source has not yet been written. See [`doc/implementation-plan.md`](doc/implementation-plan.md)
+> for the phased work plan.
+
 ## How it works
 
 ```
@@ -30,23 +34,67 @@ proprietary.
 4. The gateway forwards events to the bridge microservice, which maps hardware
    IDs to player tokens and calls the game API.
 
-Full protocol and state machine details are in [`doc/`](doc/).
+## Hardware
+
+| Role    | Board                             | Notes                                    |
+|---------|-----------------------------------|------------------------------------------|
+| Device  | Seeed T1000-E (nRF52840)          | GPS + LR1110 LoRa built in, compact form factor, low power |
+| Gateway | Heltec WiFi LoRa 32 V3 (ESP32-S3) | WiFi for internet connectivity           |
 
 ## Repository layout
 
 ```
 gpsgame-meshclient/
-├── doc/                    Design documentation (architecture, protocol, etc.)
+├── doc/                    Design documentation (see below)
 ├── src/
-│   ├── device/             Player tracker firmware (state machine, GPS, fences)
-│   └── gateway/            Gateway firmware (mesh server + WebSocket bridge)
+│   ├── device/             Player tracker firmware (not yet implemented)
+│   └── gateway/            Gateway firmware (not yet implemented)
 ├── variants/
 │   ├── heltec_v3/          Heltec WiFi LoRa 32 V3 build environments
 │   └── t1000-e/            Seeed T1000-E (nRF52840) build environments
-├── mock_game/              Go mock game server for development and field testing
+├── mock_game/              Go mock game server (not yet implemented)
 ├── meshcore/               MeshCore library (git submodule)
 └── platformio.ini          Root PlatformIO config and platform base sections
 ```
+
+## Documentation
+
+All design decisions are captured in [`doc/`](doc/). Read the doc README for an
+overview; the key documents are:
+
+| Document | Contents |
+|----------|----------|
+| [`doc/architecture.md`](doc/architecture.md) | System overview, component roles, startup sequence, event flow |
+| [`doc/protocol.md`](doc/protocol.md) | Packet formats, geofence encoding, message sequences |
+| [`doc/device-design.md`](doc/device-design.md) | State machine, LED patterns, NVS persistence, module structure |
+| [`doc/gateway-design.md`](doc/gateway-design.md) | Gateway responsibilities, WebSocket bridge, deployment tiers |
+| [`doc/bridge-design.md`](doc/bridge-design.md) | Bridge microservice design (Go, Postgres, Redis) |
+| [`doc/implementation-plan.md`](doc/implementation-plan.md) | Phased work plan and integration guidance |
+| [`doc/future-directions.md`](doc/future-directions.md) | Backlog of well-understood stories not yet committed to design |
+| [`doc/research/field-research.md`](doc/research/field-research.md) | Walk test results and radio experiments |
+| [`doc/research/geofence-packing.md`](doc/research/geofence-packing.md) | Varint delta encoding analysis for `GEOFENCE_SEGMENT` packets |
+
+## Building
+
+This is a [PlatformIO](https://platformio.org/) project. MeshCore is a git
+submodule and must be initialised before any build attempt:
+
+```bash
+git clone <repo-url> gpsgame-meshclient
+cd gpsgame-meshclient
+git submodule update --init --recursive
+```
+
+Build environments (once firmware is implemented):
+
+```bash
+pio run -e t1000e_gps_device        # player device (T1000-E)
+pio run -e heltec_v3_gps_gateway    # gateway (Heltec V3)
+```
+
+WiFi credentials and other machine-specific settings go in
+`platformio.local.ini` (git-ignored). See `CLAUDE.md` for build and variant
+details.
 
 ## Project boundary
 
@@ -61,103 +109,9 @@ This repository delivers:
 - **Mock game server** (Go) — a self-contained stand-in for the real game backend
   used during development and field testing
 
-The **game server project** delivers separately:
-- Bridge microservice (Go, Postgres, Redis)
-- Game API extensions to support sensor enrollment and event intake
-- Organiser UI to assign devices to games and monitor device state
-
-The interface between the two is defined in [`doc/gateway-design.md`](doc/gateway-design.md).
-
-## Hardware
-
-| Role    | Board                             | Notes                                    |
-|---------|-----------------------------------|------------------------------------------|
-| Device  | Seeed T1000-E (nRF52840)          | GPS + LR1110 LoRa built in, compact form factor, low power |
-| Gateway | Heltec WiFi LoRa 32 V3 (ESP32-S3) | WiFi for internet connectivity           |
-
-The system uses board-variant configs and can be extended to other MeshCore-supported boards, but these are the two targeted platforms.
-
-## Getting started
-
-### Prerequisites
-
-- [PlatformIO](https://platformio.org/) (CLI or VS Code extension)
-- Git with submodule support
-
-### Clone and initialise
-
-```bash
-git clone <repo-url> gpsgame-meshclient
-cd gpsgame-meshclient
-git submodule update --init --recursive
-```
-
-### Build
-
-List available environments:
-
-```bash
-pio project config --json-output | python -c \
-  "import sys,json; [print(e) for e in json.load(sys.stdin)[0][1]]"
-```
-
-Build a specific target:
-
-```bash
-pio run -e t1000e_gps_device        # player device (T1000-E)
-pio run -e heltec_v3_gps_gateway    # gateway (Heltec V3)
-```
-
-Upload and monitor:
-
-```bash
-pio run -e t1000e_gps_device -t upload
-pio device monitor -e t1000e_gps_device
-```
-
-### Local overrides
-
-Create `platformio.local.ini` (git-ignored) for per-machine settings:
-
-```ini
-[env:heltec_v3_gps_gateway]
-upload_port = /dev/ttyUSB0
-build_flags =
-    ${heltec_v3_gps_gateway.build_flags}
-    -D WIFI_SSID='"MyNetwork"'
-    -D WIFI_PWD='"MyPassword"'
-    -D ADMIN_PASSWORD='"secret"'
-```
-
-## Board variants
-
-Board-specific configurations live under `variants/*/platformio.ini`. Each file
-defines a board base section and one or more `[env:...]` build environments.
-
-The base sections extend `[esp32_base]`, `[nrf52_base]`, etc. from the root
-`platformio.ini`. `MC_VARIANT="<board>"` tells the MeshCore library build script
-(`meshcore/build_as_lib.py`) which board HAL to compile from
-`meshcore/variants/<board>/`.
-
-To add a new board:
-
-1. Create `variants/<board-name>/platformio.ini`.
-2. Define a `[<board-name>]` section extending the appropriate platform base.
-3. Set `MC_VARIANT='"<board-name>"'` — this must match a directory under
-   `meshcore/variants/`.
-4. Add `[env:<board-name>_gps_device]` and/or `[env:<board-name>_gps_gateway]`
-   environments with `build_src_filter = +<device>` or `+<gateway>`.
-
-## Documentation
-
-| Document | Contents |
-|----------|----------|
-| [`doc/architecture.md`](doc/architecture.md) | System overview, component roles, startup sequence, event flow |
-| [`doc/protocol.md`](doc/protocol.md) | Packet formats, geofence encoding, message sequences |
-| [`doc/device-design.md`](doc/device-design.md) | State machine, LED patterns, NVS persistence, module structure |
-| [`doc/gateway-design.md`](doc/gateway-design.md) | Gateway responsibilities, WebSocket bridge, deployment tiers |
-| [`doc/bridge-design.md`](doc/bridge-design.md) | Bridge microservice design (Go, Postgres, Redis) |
-| [`doc/implementation-plan.md`](doc/implementation-plan.md) | Phased work plan and integration guidance |
+The **game server project** delivers separately: bridge microservice, game API
+extensions, and organiser UI. The interface between the two is defined in
+[`doc/gateway-design.md`](doc/gateway-design.md).
 
 ## License
 
