@@ -68,6 +68,9 @@ All major design decisions are captured in `doc/`. Read these before implementin
 - `doc/device-design.md` — state machine (Uninitialised → Unenrolled → Syncing → Active), NVS persistence, LED patterns, retry parameters
 - `doc/gateway-design.md` — bridge design, WebSocket-over-TLS (preferred) vs HTTP polling fallback
 - `doc/implementation-plan.md` — phased work plan and mock game server API (`/enroll`, `/assign/{node_id}`, `/event`, `/status`)
+- `doc/future-directions.md` — backlog of well-understood stories not yet committed to design
+- `doc/research/field-research.md` — walk test results and radio experiments (informs frequency and antenna choices)
+- `doc/research/geofence-packing.md` — varint delta encoding analysis for `GEOFENCE_SEGMENT` packets
 
 ## Current Status
 
@@ -76,6 +79,8 @@ Firmware source code has not yet been written. `src/device/` and `src/gateway/` 
 ## LoRa Parameters
 
 Default radio config (defined in root `platformio.ini`, override per-variant if needed):
-- Frequency: 869.618 MHz
+- Frequency: 869.525 MHz (preferred for game use — see below)
 - Bandwidth: 62.5 kHz
 - Spreading factor: 8
+
+**Frequency note:** The project was initialised with 869.618 MHz (the main MeshCore community channel). Field testing (2026-06-04) showed that channel carries heavy ambient mesh flood traffic — 4.7% TX duty cycle, 54% duplicate rate — almost entirely from relaying other people's traffic rather than game messages. Retuning to 869.525 MHz dropped TX duty cycle to 0.36% (13× reduction) with zero duplicates. The `platformio.ini` default should be updated to 869.525 MHz. Note: 869.525 MHz is also used by Meshtastic; test in your area before committing to it as the final game frequency.
