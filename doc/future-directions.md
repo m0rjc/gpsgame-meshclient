@@ -70,29 +70,31 @@ share a lot of the codebase. The checkpoint stations would batch arrival informa
 when enough idle time has passed. A large linear event such as the Nidderdale Rotary Walk could consider a forwarding approach where checkpoints
 further down the valley relay packets for more remote stations, or use a hilltop repeater network.
 
-It should be possible to pack a competitor number and relative time into 3 or 4 bytes, so maximising the amount of reports we can squeeze into a single
-LoRa packet. A possible format could be to use tight bit packing. Solving this is just maths and easily testable. A system that doesn't care about per-competitor
-timing beyond the accuracy of the packet timestamp (and therefore the maximum delay configured) can set the bits per relative time to 0.
+### Encoding
 
-The bucket size is preconfigured — transmitted to the station as part of the server's enrollment response. If the bucket interval is 5 minutes
-and the packet timestamp is 10:00, then a relative time value of 0 represents any arrival between 10:00:00 and 10:04:59.
+Records are transmitted in arrival order as a flat stream of protobuf-style varint pairs: `(uint64 time_delta, sint32 competitor_delta)`. The first record encodes absolute values (delta from zero); each subsequent record encodes the delta from the previous. Time is in whole minutes since the POSIX epoch (POSIX timestamp ÷ 60). No bucketing configuration is needed — 1-minute grain is sufficient, and the protocol is simpler for it.
+
+**Cost of the first record:** POSIX minutes (~29 million) requires 4 bytes; a competitor number up to ~16,000 requires 2 bytes — 6 bytes total. Each subsequent record averages ~2 bytes. In a ~200-byte body this yields roughly 97 arrivals per packet, with no pre-configured field widths and no server-side configuration of bucket sizes.
+
+**Packet identity and deduplication** — the first `time_delta` value (the absolute arrival time of the first competitor in the batch) is already present in the stream and serves as the packet identifier. The deduplication key is `(node_id, first_arrival_time)`, directly parallel to `(node_id, event_type, ts)` in the GPS event protocol. The station retransmits until it receives an ACK; the server drops duplicates on the same key.
+
+The 1-minute grain is sufficient for this key because a collision requires two distinct packets from the same station to start within the same minute — meaning the first packet must have filled (~100 arrivals) before the minute turns. That throughput implies a large commercial event with multiple parallel timing readers. RAYNET does support events at that scale, but in a safety and welfare role: the timing infrastructure at a mass-participation event is already a commercial system. This protocol targets the community event where a volunteer is currently logging arrivals on a clipboard; at that scale, filling a packet in under a minute at a single checkpoint is not a realistic scenario. Less so if multiple readers at a checkpoint that competitors must interact with are all independent mesh clients with their own node_id.
 
 ### Header
 
-| type    | content          |
+| field   | content          |
 | ------- | ---------------- |
 | 8 bits  | type enum        |
 | 8 bits  | version          |
-| 16 bits | packet timestamp |
-| 4 bits  | bits per competitor number — n = ⌈log₂(maxcompetitor)⌉ |
-| 4 bits  | bits per relative time — n = ⌈log₂(max_buckets)⌉ |
 
-### Reports
+### Body
 
-| type    | content          |
-| ------- | ---------------- |
-| x bits  | unsigned integer competitor number       |
-| y bits  | unsigned time in bucket intervals since the packet timestamp   |
+A stream of varint pairs, read until end of packet:
+
+| field              | encoding | content                                      |
+| ------------------ | -------- | -------------------------------------------- |
+| `time_delta`       | uint64   | minutes since POSIX epoch (first record), or minutes since previous arrival |
+| `competitor_delta` | sint32   | competitor number (first record), or signed delta from previous |
 
 
 ---

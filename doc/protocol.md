@@ -16,7 +16,6 @@ All app payloads are encrypted using MeshCore shared secrets.
 
 `time_t` — 64-bit POSIX timestamp (seconds). Per-second granularity is sufficient to resolve "who reached the checkpoint first" questions. Size: 8 bytes.
 
-`latlon_t` — compact location encoding. Latitude and longitude are each encoded into 24 bits, giving 1.2 cm latitude resolution and worst-case 2.4 cm longitude resolution — well within the accuracy of consumer GPS hardware. Size: 6 bytes.
 
 ## Gateway Broadcast Process
 
@@ -59,10 +58,11 @@ Fields:
 - `uint8_t version` — protocol version
 - `uint32_t node_id` — device Mesh ID
 - `uint8_t friendly_id` — human-readable device number, matching the label affixed to the hardware (1–255)
-- `latlon_t location` — device current location (used as a hint to which game/event)
+- `int32_t lat` — latitude, degrees × 10⁶ (NMEA DDMM.MMMMM converted to decimal degrees)
+- `int32_t lon` — longitude, degrees × 10⁶
 - `time_t ts` — GPS-derived timestamp
 
-Total size: 21 bytes
+Total size: 23 bytes
 
 ### 2. GEOFENCE_SEGMENT
 
@@ -125,13 +125,21 @@ sequenceDiagram
 - `uint8_t segment_count`
 - `uint8_t flags` — reserved, set to 0
 
-#### FenceEntry (7 bytes each)
-- `latlon_t centre` — 6 bytes
+#### FenceEntry (variable length)
+- `sint32 lat_delta` — ZigZag + varint, degrees × 10⁶ delta from previous entry
+- `sint32 lon_delta` — ZigZag + varint, degrees × 10⁶ delta from previous entry
 - `uint8_t radius_flags`
   - bits 0–6: radius in metres (0–127)
   - bit 7: compound fence indicator (this entry extends the previous fence)
 
-Total size: 5 + N×7 bytes. At the SF7/SF8 LoRa payload limit (222 bytes): maximum 31 entries per packet.
+The first entry in each packet carries absolute coordinates (delta from zero). The
+server sorts fence groups by nearest-neighbour centroid before encoding, keeping
+compound groups (same `control_id`) intact.
+
+Total size: 5 bytes header + variable body. For dense urban games (median step
+< 537 m) entries average ~5 bytes, giving ~42 entries per packet. For rural events
+with kilometre-scale checkpoint spacing entries cost the same as a fixed 3-byte
+encoding. See `research/geofence-packing.md` for full analysis.
 
 ### 3. SYNC_STATUS
 
@@ -151,14 +159,15 @@ Sent by the device when the player enters a geofence or presses the button.
 Fields:
 - `uint8_t type` = `0x04`
 - `uint8_t version` — protocol version
-- `latlon_t location` — 6 bytes
+- `int32_t lat` — latitude, degrees × 10⁶
+- `int32_t lon` — longitude, degrees × 10⁶
 - `time_t ts` — 8 bytes. Captured once when the event occurs; preserved unchanged on retransmissions. Together with `node_id` and `event_type`, this is the event's unique ID for bridge-level deduplication.
 - `uint8_t event_type`
   - `0x00` = automatic geofence entry
   - `0x01` = user-initiated (button press)
   - `0x02` = periodic location ping (no game event; device has not reported for a while and is broadcasting its current position)
 
-Total size: 17 bytes
+Total size: 19 bytes
 
 ### 5. EVENT_ACK
 

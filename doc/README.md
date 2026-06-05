@@ -28,3 +28,11 @@ The design is built around three components:
 - `gateway-design.md` — gateway responsibilities, discovery model, bridge microservice and callback design
 - `bridge-design.md` — bridge microservice design (Go, Postgres, Redis, Kubernetes) — stub
 - `implementation-plan.md` — phased work plan and integration guidance
+- `future-directions.md` — backlog of well-understood stories not yet committed to design
+
+## Research
+
+Empirical findings and analysis supporting design decisions:
+
+- `research/field-research.md` — walk test results and radio experiments
+- `research/geofence-packing.md` — varint delta encoding analysis for `GEOFENCE_SEGMENT` packets
